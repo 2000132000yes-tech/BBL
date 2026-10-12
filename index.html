@@ -2,271 +2,176 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Simple Block Game</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game</title>
     <style>
-        * {
-            box-sizing: border-box;
-        }
         body {
             margin: 0;
-            padding: 0;
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
-            background-color: #000000;
+            background-color: #000;
             overflow: hidden;
-            font-family: sans-serif;
-            user-select: none;
-        }
-        #gameContainer {
-            position: relative;
-            width: 100vmin;
-            height: 100vmin;
-            max-width: 100vw;
-            max-height: 100vh;
-            background-color: #000000;
         }
         canvas {
-            display: block;
-            width: 100%;
-            height: 100%;
-            background-color: #000000;
-        }
-        /* 우측 상단 재화 UI */
-        .ui-layer {
-            position: absolute;
-            top: 15px;
-            right: 15px;
-            display: flex;
-            align-items: center;
-            background: rgba(30, 30, 30, 0.8);
-            border: 1px solid #555;
-            padding: 6px 12px;
-            border-radius: 15px;
-            color: #ffffff;
-            font-size: 16px;
-            font-weight: bold;
-            z-index: 10;
-            pointer-events: none;
-        }
-        .diamond-icon {
-            width: 10px;
-            height: 10px;
-            background-color: #aaaaaa;
-            transform: rotate(45deg);
-            margin-right: 8px;
+            border: 1px solid #333;
+            background-color: #000;
         }
     </style>
 </head>
 <body>
-    <div id="gameContainer">
-        <div class="ui-layer">
-            <div class="diamond-icon"></div>
-            <span id="gemCount">0</span>
-        </div>
-        <canvas id="gameCanvas"></canvas>
-    </div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
 
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        const gemCountEl = document.getElementById('gemCount');
 
-        // 사운드 출력을 위한 AudioContext
-        let audioCtx = null;
-        function initAudio() {
-            if (!audioCtx) {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            }
-        }
-
-        // 돌 두드리는 소리 (타격/파괴음)
-        function playStoneSound(isBreak = false) {
-            if (!audioCtx) return;
-            try {
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.type = isBreak ? 'triangle' : 'square';
-                
-                const freq = isBreak ? 120 + Math.random() * 80 : 250 + Math.random() * 100;
-                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.08);
-
-                gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
-
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-
-                osc.start();
-                osc.stop(audioCtx.currentTime + 0.08);
-            } catch (e) {}
-        }
-
-        // 캔버스 크기 설정 (정사각형)
-        const size = Math.min(window.innerWidth, window.innerHeight);
-        canvas.width = size;
-        canvas.height = size;
-
-        const cols = 30; // 가로 칸수
-        const rows = 30; // 세로 칸수
-        const blockSize = size / cols;
-
-        let gems = 0;
-        let blocks = [];
-        let particles = [];
-        let floatingTexts = [];
-
-        // 하얀색 공 객체 (오른쪽 위치, 블록 크기와 유사)
-        let ball = {
-            x: size * 0.75,
-            y: size * 0.5,
-            radius: blockSize * 0.45,
-            dx: -blockSize * 0.15,
-            dy: blockSize * 0.12,
-            damage: 1
+        // 1. 공 설정 (시작 위치: 화면 정가운데, 크기 대폭 축소, 속도 빠르게)
+        const ball = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            radius: 1.5, // 크기 줄임
+            color: '#ffffff', // 하얀색 공
+            dx: 9,  // 속도 빠르게
+            dy: -7, // 속도 빠르게
+            history: [],
+            maxHistory: 10,
+            active: true
         };
 
-        // 왼쪽 반을 채우는 회색 블록 초기화
-        // 왼쪽 절반: cols / 2 만큼 채움
-        const leftCols = Math.floor(cols / 2);
+        // 2. 블록 설정 (화면 오른쪽 반을 채우고, 회색, 크기는 공과 비슷하거나 한 칸 크기)
+        const pixelSize = 6;
+        const blocks = [];
+        const cols = Math.floor(canvas.width / pixelSize);
+        const rows = Math.floor(canvas.height / pixelSize);
+
+        const startCol = Math.floor(cols / 2); // 오른쪽 반 시작 지점
+
         for (let r = 0; r < rows; r++) {
-            for (let c = 0; c < leftCols; c++) {
+            for (let c = startCol; c < cols; c++) {
                 blocks.push({
-                    x: c * blockSize,
-                    y: r * blockSize,
-                    hp: 1,
-                    maxHp: 1
+                    x: c * pixelSize,
+                    y: r * pixelSize,
+                    hp: 1, // 체력 1
+                    color: '#888888' // 회색 블록
                 });
             }
         }
 
-        // 한 줄이 없어졌을 때 처리 및 위에서 리필
-        function checkAndRefillBlocks() {
-            // 행별로 블록 개수 확인
-            for (let r = 0; r < rows; r++) {
-                let rowBlocks = blocks.filter(b => Math.abs(b.y - r * blockSize) < 1);
-                // 해당 행의 블록이 모두 사라졌다면
-                if (rowBlocks.length === 0) {
-                    // 그 위쪽의 블록들을 아래로 한 칸씩 내림
-                    blocks.forEach(b => {
-                        if (b.y < r * blockSize) {
-                            b.y += blockSize;
-                        }
-                    });
-                    // 맨 위쪽(r=0)에 새로운 줄 채우기
-                    for (let c = 0; c < leftCols; c++) {
-                        blocks.push({
-                            x: c * blockSize,
-                            y: 0,
-                            hp: 1,
-                            maxHp: 1
-                        });
-                    }
-                }
-            }
-        }
-
-        // 파티클 생성 함수 (렉 방지를 위해 적정 개수 제한)
+        // 파티클 (타격/이펙트)
+        const particles = [];
         function createParticles(x, y) {
-            for (let i = 0; i < 5; i++) {
+            for (let i = 0; i < 8; i++) {
                 const angle = Math.random() * Math.PI * 2;
-                const speed = Math.random() * 2 + 1;
+                const speed = Math.random() * 3 + 1;
                 particles.push({
                     x: x,
                     y: y,
                     dx: Math.cos(angle) * speed,
                     dy: Math.sin(angle) * speed,
-                    size: blockSize * 0.2,
+                    radius: Math.random() * 1.5 + 0.5,
                     alpha: 1,
-                    decay: 0.04
+                    decay: 0.05
                 });
             }
         }
 
-        // 부서질 때 올라가는 +1 텍스트 생성 (무작위 위쪽 방향)
+        // 떠오르는 +1 텍스트
+        const floatingTexts = [];
         function createFloatingText(x, y) {
-            const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.2; // 위쪽 기준 좌우 무작위
-            const speed = 1.5 + Math.random();
+            const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.0;
+            const speed = 1.5;
             floatingTexts.push({
                 x: x,
                 y: y,
                 dx: Math.cos(angle) * speed,
                 dy: Math.sin(angle) * speed,
-                alpha: 1,
-                text: '+1'
+                alpha: 1
             });
         }
 
-        // 게임 업데이트 로직
+        let score = 0;
+
         function update() {
-            // 공 이동
-            ball.x += ball.dx;
-            ball.y += ball.dy;
+            if (ball.active) {
+                // 잔상 기록
+                ball.history.push({ x: ball.x, y: ball.y });
+                if (ball.history.length > ball.maxHistory) {
+                    ball.history.shift();
+                }
 
-            // 벽 충돌 (좌우상하)
-            if (ball.x - ball.radius < 0) {
-                ball.x = ball.radius;
-                ball.dx = -ball.dx;
-            }
-            if (ball.x + ball.radius > canvas.width) {
-                ball.x = canvas.width - ball.radius;
-                ball.dx = -ball.dx;
-            }
-            if (ball.y - ball.radius < 0) {
-                ball.y = ball.radius;
-                ball.dy = -ball.dy;
-            }
-            if (ball.y + ball.radius > canvas.height) {
-                ball.y = canvas.height - ball.radius;
-                ball.dy = -ball.dy;
-            }
+                // 공 이동
+                ball.x += ball.dx;
+                ball.y += ball.dy;
 
-            // 블록과의 충돌 처리 (안쪽도 부술 수 있도록 모든 블록 검사)
-            for (let i = blocks.length - 1; i >= 0; i--) {
-                const b = blocks[i];
-                
-                // 사각형과 원의 충돌 감지
-                const closestX = Math.max(b.x, Math.min(ball.x, b.x + blockSize));
-                const closestY = Math.max(b.y, Math.min(ball.y, b.y + blockSize));
+                // 벽 충돌 (왼쪽/위/아래 벽에 닿으면 튕김)
+                if (ball.x - ball.radius <= 0) {
+                    ball.x = ball.radius;
+                    ball.dx = -ball.dx;
+                }
+                if (ball.y - ball.radius <= 0) {
+                    ball.y = ball.radius;
+                    ball.dy = -ball.dy;
+                }
+                if (ball.y + ball.radius >= canvas.height) {
+                    ball.y = canvas.height - ball.radius;
+                    ball.dy = -ball.dy;
+                }
+                // 오른쪽 끝 벽에 닿으면 리셋 또는 반사 (여기서는 반사 처리)
+                if (ball.x + ball.radius >= canvas.width) {
+                    ball.x = canvas.width - ball.radius;
+                    ball.dx = -ball.dx;
+                }
 
-                const distX = ball.x - closestX;
-                const distY = ball.y - closestY;
-                const distance = Math.hypot(distX, distY);
-
-                if (distance < ball.radius) {
-                    // 데미지 적용 및 블록 파괴
-                    b.hp -= ball.damage;
-                    playStoneSound(b.hp <= 0);
-
-                    if (b.hp <= 0) {
-                        createParticles(b.x + blockSize / 2, b.y + blockSize / 2);
-                        createFloatingText(b.x + blockSize / 2, b.y + blockSize / 2);
+                // 블록 충돌 체크 (안쪽도 부술 수 있도록)
+                for (let i = blocks.length - 1; i >= 0; i--) {
+                    const b = blocks[i];
+                    if (
+                        ball.x + ball.radius >= b.x &&
+                        ball.x - ball.radius <= b.x + pixelSize &&
+                        ball.y + ball.radius >= b.y &&
+                        ball.y - ball.radius <= b.y + pixelSize
+                    ) {
+                        // 데미지 1 부여 및 파괴
+                        createParticles(b.x + pixelSize / 2, b.y + pixelSize / 2);
+                        createFloatingText(b.x + pixelSize / 2, b.y + pixelSize / 2);
                         
-                        gems += 1;
-                        gemCountEl.textContent = gems;
-
+                        score += 1;
                         blocks.splice(i, 1);
-                        checkAndRefillBlocks();
-                    } else {
-                        playStoneSound(false);
-                    }
 
-                    // 튕김 반사각 계산
-                    if (Math.abs(distX) > Math.abs(distY)) {
+                        // 간단한 반사 처리
                         ball.dx = -ball.dx;
-                    } else {
-                        ball.dy = -ball.dy;
+                        break;
                     }
-                    break;
+                }
+
+                // 한 줄이 없어지면 내려오면서 채우기 로직
+                for (let r = 0; r < rows; r++) {
+                    const rowBlocks = blocks.filter(b => Math.abs(b.y - r * pixelSize) < 1);
+                    if (rowBlocks.length === 0) {
+                        // 해당 줄 위쪽 블록들을 아래로 한 칸씩 내림
+                        blocks.forEach(b => {
+                            if (b.y < r * pixelSize) {
+                                b.y += pixelSize;
+                            }
+                        });
+                        // 맨 위쪽(r=0)에 새로운 줄 채우기
+                        for (let c = startCol; c < cols; c++) {
+                            blocks.push({
+                                x: c * pixelSize,
+                                y: 0,
+                                hp: 1,
+                                color: '#888888'
+                            });
+                        }
+                    }
                 }
             }
 
             // 파티클 업데이트
             for (let i = particles.length - 1; i >= 0; i--) {
-                let p = particles[i];
+                const p = particles[i];
                 p.x += p.dx;
                 p.y += p.dy;
                 p.alpha -= p.decay;
@@ -275,63 +180,86 @@
                 }
             }
 
-            // 플로팅 텍스트 업데이트 (+1이 위로 올라가며 흐려짐)
+            // 플로팅 텍스트 업데이트
             for (let i = floatingTexts.length - 1; i >= 0; i--) {
-                let ft = floatingTexts[i];
+                const ft = floatingTexts[i];
                 ft.x += ft.dx;
                 ft.y += ft.dy;
-                ft.alpha -= 0.025;
+                ft.alpha -= 0.03;
                 if (ft.alpha <= 0) {
                     floatingTexts.splice(i, 1);
                 }
             }
         }
 
-        // 화면 그리기
         function draw() {
+            // 배경 검은색
             ctx.fillStyle = '#000000';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // 회색 블록 그리기
-            ctx.fillStyle = '#888888';
+            // 오른쪽 반에 위치한 회색 블록 그리기
             for (let i = 0; i < blocks.length; i++) {
-                ctx.fillRect(blocks[i].x, blocks[i].y, blockSize - 1, blockSize - 1);
+                ctx.fillStyle = blocks[i].color;
+                ctx.fillRect(blocks[i].x, blocks[i].y, pixelSize - 0.5, pixelSize - 0.5);
             }
 
-            // 파티클 그리기
+            // 공 잔상 및 하얀색 공 그리기
+            if (ball.active) {
+                for (let i = 0; i < ball.history.length; i++) {
+                    const pos = ball.history[i];
+                    const alpha = (i + 1) / ball.history.length;
+                    ctx.beginPath();
+                    ctx.arc(pos.x, pos.y, ball.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.4})`;
+                    ctx.fill();
+                    ctx.closePath();
+                }
+
+                ctx.beginPath();
+                ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+                ctx.fillStyle = ball.color;
+                ctx.fill();
+                ctx.closePath();
+            }
+
+            // 파티클 이펙트
             for (let i = 0; i < particles.length; i++) {
-                let p = particles[i];
-                ctx.fillStyle = `rgba(136, 136, 136, ${p.alpha})`;
-                ctx.fillRect(p.x, p.y, p.size, p.size);
+                const p = particles[i];
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 255, 255, ${p.alpha})`;
+                ctx.fill();
+                ctx.closePath();
             }
 
-            // 하얀색 공 그리기
-            ctx.beginPath();
-            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-            ctx.fillStyle = '#ffffff';
-            ctx.fill();
-            ctx.closePath();
+            // 위쪽 오른쪽 구석 회색 마름모 및 숫자 UI
+            ctx.save();
+            ctx.translate(canvas.width - 60, 30);
+            ctx.rotate(Math.PI / 4);
+            ctx.fillStyle = '#888888';
+            ctx.fillRect(-6, -6, 12, 12);
+            ctx.restore();
 
-            // 흐려지며 올라가는 +1 텍스트 그리기
+            ctx.font = 'bold 16px sans-serif';
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'right';
+            ctx.fillText(score, canvas.width - 25, 36);
+
+            // 블록 파괴 시 올라가는 +1 텍스트 (위쪽으로 무작위 방향, 흐려짐)
             for (let i = 0; i < floatingTexts.length; i++) {
-                let ft = floatingTexts[i];
-                ctx.font = 'bold 16px sans-serif';
+                const ft = floatingTexts[i];
+                ctx.font = 'bold 12px sans-serif';
                 ctx.fillStyle = `rgba(255, 255, 255, ${ft.alpha})`;
-                ctx.fillText(ft.text, ft.x, ft.y);
+                ctx.textAlign = 'center';
+                ctx.fillText('+1', ft.x, ft.y);
             }
         }
 
-        // 메인 게임 루프
         function loop() {
             update();
             draw();
             requestAnimationFrame(loop);
         }
-
-        // 사용자 터치/클릭 시 오디오 활성화 및 시작
-        window.addEventListener('pointerdown', () => {
-            initAudio();
-        }, { once: true });
 
         loop();
     </script>
