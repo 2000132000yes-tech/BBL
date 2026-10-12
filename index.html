@@ -27,7 +27,7 @@
             max-width: 70vw;
             max-height: 70vh;
             background-color: #000000;
-            border: 2px solid #333333;
+            border: 2px solid #555555;
         }
         canvas {
             display: block;
@@ -87,17 +87,6 @@
         .top-btn:active {
             background: #555;
         }
-        .floor-indicator {
-            position: absolute;
-            top: 15px;
-            left: 50%;
-            transform: translateX(-50%);
-            color: #888;
-            font-size: 16px;
-            font-weight: bold;
-            pointer-events: none;
-            z-index: 10;
-        }
 
         /* 슬라이드 업그레이드 창 */
         .upgrade-panel {
@@ -105,7 +94,7 @@
             top: -100%;
             left: 0;
             width: 100%;
-            height: 75%;
+            height: 50%;
             background: rgba(15, 15, 15, 0.98);
             border-bottom: 2px solid #444;
             box-shadow: 0 10px 20px rgba(0,0,0,0.8);
@@ -152,11 +141,6 @@
             padding: 10px;
             border-radius: 8px;
             display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-        .card-top {
-            display: flex;
             justify-content: space-between;
             align-items: center;
         }
@@ -167,6 +151,7 @@
         .card-stats {
             font-size: 11px;
             color: #aaa;
+            margin-top: 4px;
         }
         .upgrade-btn {
             background: #444;
@@ -190,45 +175,16 @@
             color: #888 !important;
             cursor: not-allowed;
         }
-        .sub-upgrades {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-            border-top: 1px solid #333;
-            padding-top: 6px;
-            margin-top: 2px;
-        }
-        .sub-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 12px;
-        }
-        .sub-item span {
-            color: #ccc;
-        }
-        .sub-btn-group {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-        .all-label {
-            font-size: 10px;
-            color: #888;
-            margin-right: 2px;
-        }
     </style>
 </head>
 <body>
     <div id="gameContainer">
-        <div class="floor-indicator" id="floorText">1F</div>
         <div class="ui-layer">
             <div class="currency-box">
                 <div class="diamond-icon"></div>
                 <span id="gemCount">0</span>
             </div>
             <div class="top-right-group">
-                <button class="top-btn" id="devBtn">DEV</button>
                 <button class="top-btn" id="openUpgradeBtn">+</button>
             </div>
         </div>
@@ -250,25 +206,15 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const gemCountEl = document.getElementById('gemCount');
-        const floorTextEl = document.getElementById('floorText');
         const upgradePanel = document.getElementById('upgradePanel');
         const openUpgradeBtn = document.getElementById('openUpgradeBtn');
         const closeUpgradeBtn = document.getElementById('closeUpgradeBtn');
-        const devBtn = document.getElementById('devBtn');
         const upgradeListContent = document.getElementById('upgradeListContent');
 
         let gems = 0;
-        let floor = 1;
-        let totalBlocksInFloor = 0;
-        let destroyedBlocksInFloor = 0;
 
         openUpgradeBtn.addEventListener('click', () => upgradePanel.classList.add('active'));
         closeUpgradeBtn.addEventListener('click', () => upgradePanel.classList.remove('active'));
-        devBtn.addEventListener('click', () => {
-            gems += 10000;
-            gemCountEl.textContent = gems;
-            updateUpgradeUI();
-        });
 
         let audioCtx = null;
         function initAudio() {
@@ -305,30 +251,26 @@
         let particles = [];
         let floatingTexts = [];
 
-        // 업그레이드 데이터
-        const upgrades = {
-            org: { count: 1, cost: 5, costInc: 5, speedLv: 0, speedCost: 20, sizeLv: 0, sizeCost: 50, blockLv: 0, blockCost: 500, dmgLv: 0, dmgCost: 500 },
-            ert: { count: 0, unlocked: false, cost: 50, costInc: 50, speedLv: 0, speedCost: 20, dmgLv: 0, dmgCost: 20 },
-            red: { count: 0, unlocked: false, cost: 100, costInc: 100, speedLv: 0, speedCost: 20, rangeLv: 0, rangeCost: 50, luckLv: 0, luckCost: 100, dmgLv: 0, dmgCost: 100 },
-            cbl: { count: 0, unlocked: false, cost: 100, costInc: 150, toothLv: 0, toothCost: 100, dmgLv: 0, dmgCost: 100, toothRangeLv: 0, toothRangeCost: 100, speedLv: 0, speedCost: 150 }
+        // 공 구매 및 가격 설정 (5원 시작, 5원씩 증가)
+        let ballUpgrade = {
+            count: 1,
+            cost: 5,
+            costInc: 5
         };
 
         let balls = [];
 
         function initBalls() {
             balls = [];
-            // 기본 주황공 1개 스폰
-            for(let i=0; i<upgrades.org.count; i++) {
-                balls.push({ type: 'org', x: blockSize * 1.5, y: size * (0.3 + i*0.1), radius: blockSize * 0.25, dx: blockSize * 0.3, dy: blockSize * 0.24, damage: 1 + upgrades.org.dmgLv });
-            }
-            for(let i=0; i<upgrades.ert.count; i++) {
-                balls.push({ type: 'ert', x: blockSize * 1.5, y: size * 0.5, radius: blockSize * 0.25, dx: blockSize * 0.3, dy: blockSize * 0.24, timer: 0 });
-            }
-            for(let i=0; i<upgrades.red.count; i++) {
-                balls.push({ type: 'red', x: blockSize * 1.5, y: size * 0.5, radius: blockSize * 0.25, dx: blockSize * 0.3, dy: blockSize * 0.24, damage: 1 + upgrades.red.dmgLv, range: blockSize * 1.5 + upgrades.red.rangeLv * blockSize * 0.5 });
-            }
-            for(let i=0; i<upgrades.cbl.count; i++) {
-                balls.push({ type: 'cbl', x: blockSize * 1.5, y: size * 0.5, radius: blockSize * 0.25, dx: blockSize * 0.3, dy: blockSize * 0.24, angle: 0 });
+            for(let i = 0; i < ballUpgrade.count; i++) {
+                balls.push({
+                    x: blockSize * 1.5,
+                    y: size * (0.4 + (i % 5) * 0.05),
+                    radius: blockSize * 0.25,
+                    dx: blockSize * 0.3,
+                    dy: blockSize * 0.24,
+                    damage: 1
+                });
             }
         }
 
@@ -336,26 +278,16 @@
 
         function spawnBlocks() {
             blocks = [];
-            destroyedBlocksInFloor = 0;
             for (let r = 0; r < rows; r++) {
                 for (let c = rightColsStart; c < cols; c++) {
-                    let rand = Math.random() * 100;
-                    let tier = 1;
-                    let luckBonus = (upgrades.red.luckLv * 1);
-                    if (rand < (5 + floor * 2 + luckBonus)) tier = 3;
-                    else if (rand < (20 + floor * 3 + luckBonus)) tier = 2;
-
-                    let hp = tier + (floor - 1);
                     blocks.push({
                         x: c * blockSize,
                         y: r * blockSize,
-                        hp: hp,
-                        maxHp: hp,
-                        tier: tier
+                        hp: 1,
+                        maxHp: 1
                     });
                 }
             }
-            totalBlocksInFloor = blocks.length;
         }
 
         spawnBlocks();
@@ -365,57 +297,39 @@
             for (let r = 0; r < rows; r++) {
                 let rowBlocks = blocks.filter(b => Math.abs(b.y - r * blockSize) < 1);
                 if (rowBlocks.length === 0) {
-                    destroyedBlocksInFloor += (cols - rightColsStart);
                     blocks.forEach(b => {
                         if (b.y < r * blockSize) {
                             b.y += blockSize;
                         }
                     });
                     for (let c = rightColsStart; c < cols; c++) {
-                        let rand = Math.random() * 100;
-                        let tier = 1;
-                        let luckBonus = (upgrades.red.luckLv * 1);
-                        if (rand < (5 + floor * 2 + luckBonus)) tier = 3;
-                        else if (rand < (20 + floor * 3 + luckBonus)) tier = 2;
-                        let hp = tier + (floor - 1);
-
                         blocks.push({
                             x: c * blockSize,
                             y: 0,
-                            hp: hp,
-                            maxHp: hp,
-                            tier: tier
+                            hp: 1,
+                            maxHp: 1
                         });
-                        totalBlocksInFloor++;
                     }
                 }
             }
-
-            // 층 클리어 체크 (90% 이상 파괴 시)
-            if (destroyedBlocksInFloor >= totalBlocksInFloor * 0.9) {
-                floor++;
-                floorTextEl.textContent = floor + 'F';
-                spawnBlocks();
-            }
         }
 
-        function createParticles(x, y, isBedrock = false) {
-            if (isBedrock) return;
-            for (let i = 0; i < 6; i++) {
+        function createParticles(x, y) {
+            for (let i = 0; i < 5; i++) {
                 const angle = Math.random() * Math.PI * 2;
                 const speed = Math.random() * 2 + 1;
                 particles.push({
                     x: x, y: y,
                     dx: Math.cos(angle) * speed,
                     dy: Math.sin(angle) * speed,
-                    size: blockSize * 0.15,
+                    size: blockSize * 0.2,
                     alpha: 1,
-                    decay: 0.05
+                    decay: 0.04
                 });
             }
         }
 
-        function createFloatingText(x, y, text) {
+        function createFloatingText(x, y) {
             const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.2;
             const speed = 1.5 + Math.random();
             floatingTexts.push({
@@ -423,181 +337,32 @@
                 dx: Math.cos(angle) * speed,
                 dy: Math.sin(angle) * speed,
                 alpha: 1,
-                text: text
+                text: '+1'
             });
         }
 
         function updateUpgradeUI() {
-            // 잠금 해금 체크
-            if (upgrades.org.count >= 10) upgrades.ert.unlocked = true;
-            if (upgrades.ert.count >= 10) upgrades.red.unlocked = true;
-            if (upgrades.red.count >= 10) upgrades.cbl.unlocked = true;
-
-            let html = '';
-
-            // 1. Org Ball
-            let orgMaxSz = upgrades.org.sizeLv >= 5;
-            html += `
+            let html = `
             <div class="upgrade-card">
-                <div class="card-top">
-                    <div>
-                        <div class="card-title">org ball</div>
-                        <div class="card-stats">1DMG | ${(1.0 + upgrades.org.sizeLv*0.1).toFixed(1)} Size | Spd Lv.${upgrades.org.speedLv} | +${upgrades.org.blockLv} Block</div>
-                    </div>
-                    <button class="upgrade-btn ${gems >= upgrades.org.cost ? 'affordable' : 'disabled'}" onclick="buyBall('org')">
-                        <div class="diamond-icon" style="width:8px;height:8px;"></div> +1 ball (${upgrades.org.cost})
-                    </button>
+                <div>
+                    <div class="card-title">공 추가 (+1 Ball)</div>
+                    <div class="card-stats">현재 보유: ${ballUpgrade.count}개</div>
                 </div>
-                <div class="sub-upgrades">
-                    <div class="sub-item"><span>+1 Speed <span class="all-label">(모두)</span></span> <button class="upgrade-btn ${gems >= upgrades.org.speedCost ? 'affordable' : 'disabled'}" style="padding:2px 8px;font-size:11px;" onclick="buySub('org','speed')">${upgrades.org.speedCost}</button></div>
-                    <div class="sub-item"><span>+0.3 Size <span class="all-label">(모두)</span></span> <button class="upgrade-btn ${orgMaxSz || gems < upgrades.org.sizeCost ? 'disabled' : 'affordable'}" style="padding:2px 8px;font-size:11px;" onclick="buySub('org','size')">${orgMaxSz ? 'MAX' : upgrades.org.sizeCost}</button></div>
-                    <div class="sub-item"><span>+1 Block <span class="all-label">(모두)</span></span> <button class="upgrade-btn ${gems >= upgrades.org.blockCost ? 'affordable' : 'disabled'}" style="padding:2px 8px;font-size:11px;" onclick="buySub('org','block')">${upgrades.org.blockCost}</button></div>
-                    <div class="sub-item"><span>+1 DMG <span class="all-label">(모두)</span></span> <button class="upgrade-btn ${gems >= upgrades.org.dmgCost ? 'affordable' : 'disabled'}" style="padding:2px 8px;font-size:11px;" onclick="buySub('org','dmg')">${upgrades.org.dmgCost}</button></div>
-                </div>
+                <button class="upgrade-btn ${gems >= ballUpgrade.cost ? 'affordable' : 'disabled'}" onclick="buyBall()">
+                    <div class="diamond-icon" style="width:8px;height:8px;"></div>구매 (${ballUpgrade.cost})
+                </button>
             </div>`;
-
-            // 2. Ert Ball
-            let ertLocked = !upgrades.ert.unlocked;
-            html += `
-            <div class="upgrade-card">
-                <div class="card-top">
-                    <div>
-                        <div class="card-title">ert ball</div>
-                        <div class="card-stats">0.1 DMG / 0.1s | Spd Lv.${upgrades.ert.speedLv}</div>
-                    </div>
-                    <button class="upgrade-btn ${ertLocked || gems < upgrades.ert.cost ? 'disabled' : 'affordable'}" onclick="buyBall('ert')">
-                        <div class="diamond-icon" style="width:8px;height:8px;"></div> ${ertLocked ? '🔒 Need 10 Org' : '+1 ball (' + upgrades.ert.cost + ')'}
-                    </button>
-                </div>
-                <div class="sub-upgrades">
-                    <div class="sub-item"><span>+1 Speed <span class="all-label">(모두)</span></span> <button class="upgrade-btn ${ertLocked || gems < upgrades.ert.speedCost ? 'disabled' : 'affordable'}" style="padding:2px 8px;font-size:11px;" onclick="buySub('ert','speed')">${upgrades.ert.speedCost}</button></div>
-                    <div class="sub-item"><span>+0.1 DMG <span class="all-label">(모두)</span></span> <button class="upgrade-btn ${ertLocked || gems < upgrades.ert.dmgCost ? 'disabled' : 'affordable'}" style="padding:2px 8px;font-size:11px;" onclick="buySub('ert','dmg')">${upgrades.ert.dmgCost}</button></div>
-                </div>
-            </div>`;
-
-            // 3. Red Ball
-            let redLocked = !upgrades.red.unlocked;
-            html += `
-            <div class="upgrade-card">
-                <div class="card-top">
-                    <div>
-                        <div class="card-title">red ball</div>
-                        <div class="card-stats">${(1+upgrades.red.dmgLv).toFixed(1)} DMG | Range: ${(1.5 + upgrades.red.rangeLv*0.5).toFixed(1)} | Spd Lv.${upgrades.red.speedLv}</div>
-                    </div>
-                    <button class="upgrade-btn ${redLocked || gems < upgrades.red.cost ? 'disabled' : 'affordable'}" onclick="buyBall('red')">
-                        <div class="diamond-icon" style="width:8px;height:8px;"></div> ${redLocked ? '🔒 Need 10 Ert' : '+1 ball (' + upgrades.red.cost + ')'}
-                    </button>
-                </div>
-                <div class="sub-upgrades">
-                    <div class="sub-item"><span>+1 Speed <span class="all-label">(모두)</span></span> <button class="upgrade-btn ${redLocked || gems < upgrades.red.speedCost ? 'disabled' : 'affordable'}" style="padding:2px 8px;font-size:11px;" onclick="buySub('red','speed')">${upgrades.red.speedCost}</button></div>
-                    <div class="sub-item"><span>+0.5 Range <span class="all-label">(모두)</span></span> <button class="upgrade-btn ${redLocked || gems < upgrades.red.rangeCost ? 'disabled' : 'affordable'}" style="padding:2px 8px;font-size:11px;" onclick="buySub('red','range')">${upgrades.red.rangeCost}</button></div>
-                    <div class="sub-item"><span>+1% Luck <span class="all-label">(모두)</span></span> <button class="upgrade-btn ${redLocked || gems < upgrades.red.luckCost ? 'disabled' : 'affordable'}" style="padding:2px 8px;font-size:11px;" onclick="buySub('red','luck')">${upgrades.red.luckCost}</button></div>
-                    <div class="sub-item"><span>+1 DMG <span class="all-label">(모두)</span></span> <button class="upgrade-btn ${redLocked || gems < upgrades.red.dmgCost ? 'disabled' : 'affordable'}" style="padding:2px 8px;font-size:11px;" onclick="buySub('red','dmg')">${upgrades.red.dmgCost}</button></div>
-                </div>
-            </div>`;
-
-            // 4. CBL Ball
-            let cblLocked = !upgrades.cbl.unlocked;
-            html += `
-            <div class="upgrade-card">
-                <div class="card-top">
-                    <div>
-                        <div class="card-title">CBL ball</div>
-                        <div class="card-stats">Teeth: ${upgrades.cbl.toothLv}/6 | DMG: ${1+upgrades.cbl.dmgLv}</div>
-                    </div>
-                    <button class="upgrade-btn ${cblLocked || gems < upgrades.cbl.cost ? 'disabled' : 'affordable'}" onclick="buyBall('cbl')">
-                        <div class="diamond-icon" style="width:8px;height:8px;"></div> ${cblLocked ? '🔒 Need 10 Red' : '+1 ball (' + upgrades.cbl.cost + ')'}
-                    </button>
-                </div>
-                <div class="sub-upgrades">
-                    <div class="sub-item"><span>+1 Tooth (Max 6)</span> <button class="upgrade-btn ${cblLocked || upgrades.cbl.toothLv >= 6 || gems < upgrades.cbl.toothCost ? 'disabled' : 'affordable'}" style="padding:2px 8px;font-size:11px;" onclick="buySub('cbl','tooth')">${upgrades.cbl.toothLv >= 6 ? 'MAX' : upgrades.cbl.toothCost}</button></div>
-                    <div class="sub-item"><span>+1 DMG</span> <button class="upgrade-btn ${cblLocked || gems < upgrades.cbl.dmgCost ? 'disabled' : 'affordable'}" style="padding:2px 8px;font-size:11px;" onclick="buySub('cbl','dmg')">${upgrades.cbl.dmgCost}</button></div>
-                    <div class="sub-item"><span>+1 Tooth Range</span> <button class="upgrade-btn ${cblLocked || gems < upgrades.cbl.toothRangeCost ? 'disabled' : 'affordable'}" style="padding:2px 8px;font-size:11px;" onclick="buySub('cbl','toothRange')">${upgrades.cbl.toothRangeCost}</button></div>
-                    <div class="sub-item"><span>+1 Speed <span class="all-label">(모두)</span></span> <button class="upgrade-btn ${cblLocked || gems < upgrades.cbl.speedCost ? 'disabled' : 'affordable'}" style="padding:2px 8px;font-size:11px;" onclick="buySub('cbl','speed')">${upgrades.cbl.speedCost}</button></div>
-                </div>
-            </div>`;
-
             upgradeListContent.innerHTML = html;
         }
 
-        window.buyBall = function(type) {
-            let u = upgrades[type];
-            if (gems >= u.cost) {
-                gems -= u.cost;
-                u.cost += u.costInc;
-                u.count++;
+        window.buyBall = function() {
+            if (gems >= ballUpgrade.cost) {
+                gems -= ballUpgrade.cost;
+                ballUpgrade.cost += ballUpgrade.costInc;
+                ballUpgrade.count++;
                 gemCountEl.textContent = gems;
                 initBalls();
                 updateUpgradeUI();
-            }
-        };
-
-        window.buySub = function(type, sub) {
-            let u = upgrades[type];
-            if (sub === 'speed') {
-                if (gems >= u.speedCost) {
-                    gems -= u.speedCost;
-                    u.speedCost += 200;
-                    u.speedLv++;
-                    gemCountEl.textContent = gems;
-                    updateUpgradeUI();
-                }
-            } else if (sub === 'size' && type === 'org') {
-                if (u.sizeLv < 5 && gems >= u.sizeCost) {
-                    gems -= u.sizeCost;
-                    u.sizeCost += 50;
-                    u.sizeLv++;
-                    gemCountEl.textContent = gems;
-                    updateUpgradeUI();
-                }
-            } else if (sub === 'block' && type === 'org') {
-                if (gems >= u.blockCost) {
-                    gems -= u.blockCost;
-                    u.blockCost += 500;
-                    u.blockLv++;
-                    gemCountEl.textContent = gems;
-                    updateUpgradeUI();
-                }
-            } else if (sub === 'dmg') {
-                if (gems >= u.dmgCost) {
-                    gems -= u.dmgCost;
-                    u.dmgCost += (type==='org'?500:(type==='ert'?20:100));
-                    u.dmgLv++;
-                    gemCountEl.textContent = gems;
-                    updateUpgradeUI();
-                }
-            } else if (sub === 'range' && type === 'red') {
-                if (gems >= u.rangeCost) {
-                    gems -= u.rangeCost;
-                    u.rangeCost += 50;
-                    u.rangeLv++;
-                    gemCountEl.textContent = gems;
-                    updateUpgradeUI();
-                }
-            } else if (sub === 'luck' && type === 'red') {
-                if (gems >= u.luckCost) {
-                    gems -= u.luckCost;
-                    u.luckCost += 100;
-                    u.luckLv++;
-                    gemCountEl.textContent = gems;
-                    updateUpgradeUI();
-                }
-            } else if (sub === 'tooth' && type === 'cbl') {
-                if (u.toothLv < 6 && gems >= u.toothCost) {
-                    gems -= u.toothCost;
-                    u.toothCost += 100;
-                    u.toothLv++;
-                    gemCountEl.textContent = gems;
-                    updateUpgradeUI();
-                }
-            } else if (sub === 'toothRange' && type === 'cbl') {
-                if (gems >= u.toothRangeCost) {
-                    gems -= u.toothRangeCost;
-                    u.toothRangeCost += 100;
-                    u.toothRangeLv++;
-                    gemCountEl.textContent = gems;
-                    updateUpgradeUI();
-                }
             }
         };
 
@@ -605,101 +370,48 @@
 
         function update() {
             for (let b of balls) {
-                let speedMult = 1 + (upgrades[b.type].speedLv * 0.2);
-                b.x += b.dx * speedMult * 2.0; // 4배 속도 반영
-                b.y += b.dy * speedMult * 2.0;
+                // 기존 속도보다 2배 더 빠르게 설정 (원래 배속의 2배 적용)
+                b.x += b.dx * 2.0;
+                b.y += b.dy * 2.0;
 
                 if (b.x - b.radius < 0) { b.x = b.radius; b.dx = -b.dx; }
                 if (b.x + b.radius > canvas.width) { b.x = canvas.width - b.radius; b.dx = -b.dx; }
                 if (b.y - b.radius < 0) { b.y = b.radius; b.dy = -b.dy; }
                 if (b.y + b.radius > canvas.height) { b.y = canvas.height - b.radius; b.dy = -b.dy; }
 
-                // Ert ball 주기적 데미지
-                if (b.type === 'ert') {
-                    b.timer++;
-                    if (b.timer >= 6) { // 0.1초마다
-                        b.timer = 0;
-                        let target = blocks[Math.floor(Math.random() * blocks.length)];
-                        if (target) {
-                            target.hp -= 0.1;
-                            if (target.hp <= 0) {
-                                playStoneSound(true);
-                                createParticles(target.x + blockSize/2, target.y + blockSize/2);
-                                let reward = target.tier === 1 ? 1 : 5;
-                                gems += reward;
-                                gemCountEl.textContent = gems;
-                                createFloatingText(target.x + blockSize/2, target.y + blockSize/2, '+' + reward);
-                                blocks.splice(blocks.indexOf(target), 1);
-                                checkAndRefillBlocks();
-                            }
-                        }
-                    }
-                }
-
-                // Cbl ball 회전
-                if (b.type === 'cbl') {
-                    b.angle += 0.08 + (upgrades.cbl.speedLv * 0.02);
-                }
-
-                // 일반 충돌 판정
                 for (let i = blocks.length - 1; i >= 0; i--) {
-                    let bl = blocks[i];
-                    let closestX = Math.max(bl.x, Math.min(b.x, bl.x + blockSize));
-                    let closestY = Math.max(bl.y, Math.min(b.y, bl.y + blockSize));
-                    let distX = b.x - closestX;
-                    let distY = b.y - closestY;
-                    let dist = Math.hypot(distX, distY);
+                    const bl = blocks[i];
+                    const closestX = Math.max(bl.x, Math.min(b.x, bl.x + blockSize));
+                    const closestY = Math.max(bl.y, Math.min(b.y, bl.y + blockSize));
 
-                    if (dist < b.radius) {
-                        let dmg = 1 + (b.type === 'org' ? upgrades.org.dmgLv : (b.type === 'red' ? upgrades.red.dmgLv : 0));
-                        bl.hp -= dmg;
+                    const distX = b.x - closestX;
+                    const distY = b.y - closestY;
+                    const distance = Math.hypot(distX, distY);
+
+                    if (distance < b.radius) {
+                        bl.hp -= b.damage;
                         playStoneSound(bl.hp <= 0);
 
                         if (bl.hp <= 0) {
-                            createParticles(bl.x + blockSize/2, bl.y + blockSize/2, bl.tier === 3);
-                            let reward = bl.tier === 1 ? 1 : 5;
-                            reward += upgrades.org.blockLv;
-                            gems += reward;
+                            createParticles(bl.x + blockSize / 2, bl.y + blockSize / 2);
+                            createFloatingText(bl.x + blockSize / 2, bl.y + blockSize / 2);
+                            
+                            gems += 1;
                             gemCountEl.textContent = gems;
-                            createFloatingText(bl.x + blockSize/2, bl.y + blockSize/2, '+' + reward);
+                            updateUpgradeUI();
+
                             blocks.splice(i, 1);
                             checkAndRefillBlocks();
                         } else {
-                            createParticles(bl.x + blockSize/2, bl.y + blockSize/2, false);
+                            playStoneSound(false);
                         }
 
-                        if (Math.abs(distX) > Math.abs(distY)) b.dx = -b.dx;
-                        else b.dy = -b.dy;
+                        if (Math.abs(distX) > Math.abs(distY)) {
+                            b.dx = -b.dx;
+                        } else {
+                            b.dy = -b.dy;
+                        }
                         break;
-                    }
-                }
-
-                // Cbl 톱니바퀴 충돌
-                if (b.type === 'cbl' && upgrades.cbl.toothLv > 0) {
-                    let toothCount = upgrades.cbl.toothLv;
-                    let toothDist = blockSize * (1.5 + upgrades.cbl.toothRangeLv * 0.5);
-                    for (let t = 0; t < toothCount; t++) {
-                        let angle = b.angle + (Math.PI * 2 / toothCount) * t;
-                        let tx = b.x + Math.cos(angle) * toothDist;
-                        let ty = b.y + Math.sin(angle) * toothDist;
-
-                        for (let i = blocks.length - 1; i >= 0; i--) {
-                            let bl = blocks[i];
-                            if (tx >= bl.x && tx <= bl.x + blockSize && ty >= bl.y && ty <= bl.y + blockSize) {
-                                let dmg = 1 + upgrades.cbl.dmgLv;
-                                bl.hp -= dmg;
-                                playStoneSound(bl.hp <= 0);
-                                if (bl.hp <= 0) {
-                                    createParticles(bl.x + blockSize/2, bl.y + blockSize/2, false);
-                                    let reward = bl.tier === 1 ? 1 : 5;
-                                    gems += reward;
-                                    gemCountEl.textContent = gems;
-                                    createFloatingText(bl.x + blockSize/2, bl.y + blockSize/2, '+' + reward);
-                                    blocks.splice(i, 1);
-                                    checkAndRefillBlocks();
-                                }
-                            }
-                        }
                     }
                 }
             }
@@ -714,7 +426,7 @@
             for (let i = floatingTexts.length - 1; i >= 0; i--) {
                 let ft = floatingTexts[i];
                 ft.x += ft.dx; ft.y += ft.dy;
-                ft.alpha -= 0.03;
+                ft.alpha -= 0.025;
                 if (ft.alpha <= 0) floatingTexts.splice(i, 1);
             }
         }
@@ -723,65 +435,28 @@
             ctx.fillStyle = '#000000';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // 포전(Fog of War) 및 빛 연출
             ctx.fillStyle = '#888888';
             for (let i = 0; i < blocks.length; i++) {
-                let bl = blocks[i];
-                let light = false;
-                for (let b of balls) {
-                    if (Math.hypot(b.x - (bl.x+blockSize/2), b.y - (bl.y+blockSize/2)) < blockSize * 4) {
-                        light = true;
-                        break;
-                    }
-                }
-                if (bl.tier === 3) ctx.fillStyle = '#aaaaaa';
-                else if (bl.tier === 2) ctx.fillStyle = '#999999';
-                else ctx.fillStyle = '#777777';
-
-                if (light) {
-                    ctx.fillRect(bl.x, bl.y, blockSize - 1, blockSize - 1);
-                } else {
-                    ctx.fillStyle = '#111111';
-                    ctx.fillRect(bl.x, bl.y, blockSize - 1, blockSize - 1);
-                }
+                ctx.fillRect(blocks[i].x, blocks[i].y, blockSize - 1, blockSize - 1);
             }
 
-            for (let p of particles) {
-                ctx.fillStyle = `rgba(255, 255, 255, ${p.alpha})`;
+            for (let i = 0; i < particles.length; i++) {
+                let p = particles[i];
+                ctx.fillStyle = `rgba(136, 136, 136, ${p.alpha})`;
                 ctx.fillRect(p.x, p.y, p.size, p.size);
             }
 
             for (let b of balls) {
                 ctx.beginPath();
-                if (b.type === 'org') ctx.fillStyle = 'orange';
-                else if (b.type === 'ert') ctx.fillStyle = 'yellow';
-                else if (b.type === 'red') ctx.fillStyle = 'red';
-                else if (b.type === 'cbl') ctx.fillStyle = 'purple';
-                
-                let radius = b.radius * (b.type === 'org' ? (1.0 + upgrades.org.sizeLv*0.1) : 1.0);
-                ctx.arc(b.x, b.y, radius, 0, Math.PI * 2);
+                ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
                 ctx.fill();
                 ctx.closePath();
-
-                // Cbl 톱니바퀴 그리기 (뾰족한 모양)
-                if (b.type === 'cbl' && upgrades.cbl.toothLv > 0) {
-                    let toothCount = upgrades.cbl.toothLv;
-                    let toothDist = blockSize * (1.5 + upgrades.cbl.toothRangeLv * 0.5);
-                    ctx.fillStyle = '#aa44ff';
-                    for (let t = 0; t < toothCount; t++) {
-                        let angle = b.angle + (Math.PI * 2 / toothCount) * t;
-                        let tx = b.x + Math.cos(angle) * toothDist;
-                        let ty = b.y + Math.sin(angle) * toothDist;
-                        ctx.beginPath();
-                        ctx.arc(tx, ty, blockSize * 0.35, 0, Math.PI * 2);
-                        ctx.fill();
-                        ctx.closePath();
-                    }
-                }
             }
 
-            for (let ft of floatingTexts) {
-                ctx.font = 'bold 12px sans-serif';
+            for (let i = 0; i < floatingTexts.length; i++) {
+                let ft = floatingTexts[i];
+                ctx.font = 'bold 16px sans-serif';
                 ctx.fillStyle = `rgba(255, 255, 255, ${ft.alpha})`;
                 ctx.fillText(ft.text, ft.x, ft.y);
             }
